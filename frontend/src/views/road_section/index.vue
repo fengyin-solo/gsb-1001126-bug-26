@@ -70,7 +70,7 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/road_section'
-const columns = ["路段编号", "路段名称", "起止桩号", "道路等级", "车道数", "路面类型", "管养单位", "路段状态"]
+const columns = ["路段编号", "路段名称", "起止桩号", "责任组", "道路等级", "车道数", "路面类型", "管养单位", "关联设施数", "最近设施回写", "路段状态"]
 const actions = ["设置施工", "设置限行", "恢复通行"]
 const statuses = ["正常", "施工", "限行", "封闭"]
 const stats = [{"label": "正常路段", "value": 0}, {"label": "施工路段", "value": 0}, {"label": "限行路段", "value": 0}]
@@ -99,7 +99,7 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
     if (!response.ok) {
       throw new Error('路段管理动作未生效，请稍后重试')
@@ -119,9 +119,11 @@ async function reload() {
       throw new Error('管养路段列表读取失败')
     }
     const payload = await response.json()
-    rows.value = payload.items ?? []
+    rows.value = Array.isArray(payload.items) ? payload.items : []
     total.value = payload.total ?? rows.value.length
   } catch (error) {
+    rows.value = []
+    total.value = 0
     errorMessage.value = error instanceof Error ? error.message : '路段管理列表读取失败'
   }
 }

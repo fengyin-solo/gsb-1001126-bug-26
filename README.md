@@ -74,3 +74,30 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 交安设施处置流程
+
+交安设施异常处置固定为三步，列表页详情弹窗与巡查工作台共用同一套规则
+（`app/services/traffic_facility.py`）：
+
+1. **核对责任组**：责任组必须在所属路段的责任组边界（`road_section.责任组选项`）内，越界指派返回 400。
+2. **确认人工桩号**：桩号格式为 `K公里+三位米`（如 `K12+300`），必须落在路段起止桩号范围内，越界返回 400；
+   历史桩号按原施工记录保留（`历史桩号`/`原始桩号` 不变），只更新当前桩号并追加变更记录。
+3. **提交回写**：前置两步完成后才能提交，结论同时落到设施台账（状态/待办）、
+   路段清单（`关联设施数`、`最近设施回写`）和巡查待办（工作台待办关闭、`facility_writeback` 落账）。
+   请求携带 `idempotency_key`，并发与重试只落一条记录。
+
+存量数据在 `Store` 初始化时一次性迁移：无责任组设施打 `待迁移` 标注，
+相同设施编号的重复登记归并到主记录的 `重复记录` 中，详情不再重复显示。
+
+相关接口：
+
+- `GET /api/traffic_facility`（支持 `keyword`/`road`/`status`/`pending_migration`）
+- `GET /api/traffic_facility/{id}`、`GET /api/traffic_facility/workbench/summary`
+- `POST /api/traffic_facility/{id}/verify-team`
+- `POST /api/traffic_facility/{id}/confirm-stake`
+- `POST /api/traffic_facility/{id}/writeback`
+- `GET /api/traffic_facility/writebacks`
+
+回归测试：`cd backend && python3 -m tests.test_traffic_facility_workflow`
+
