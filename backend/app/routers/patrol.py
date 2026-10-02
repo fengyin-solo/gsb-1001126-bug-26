@@ -1,16 +1,21 @@
-"""日常巡查接口：维护巡查记录，覆盖开始巡查、完成巡查、复核确认等动作。"""
+"""日常巡查接口：维护巡查记录，覆盖开始巡查、完成巡查、复核确认等动作。
+
+巡查工作台（核对责任组 → 确认人工桩号 → 提交回写）的接口也挂在这里。
+"""
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
 from app.services.patrol import PatrolService
+from app.services.patrol_workbench import PatrolWorkbenchService
 
 router = APIRouter(prefix="/api/patrol", tags=["日常巡查"])
 
 service = PatrolService()
+workbench = PatrolWorkbenchService()
 
 LIST_FIELDS = ["巡查编号", "巡查路段", "巡查日期", "巡查人员", "巡查车辆", "发现问题", "处置措施", "巡查状态"]
 STATUSES = ["待巡查", "巡查中", "已完成", "已复核"]
@@ -28,6 +33,45 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/workbench/todos", response_model=dict)
+def list_workbench_todos() -> dict[str, Any]:
+    """巡查工作台待办清单：每条待办关联设施与路段，供三段式流转使用。"""
+    items = workbench.list_todos()
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/{entry_id}/verify_group", response_model=ActionResult)
+def verify_group(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """第一步：核对责任组；超出路段责任边界的核对会被拒绝。"""
+    entry, message = workbench.verify_group(entry_id, payload.values.get("责任组"))
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
+
+
+@router.post("/{entry_id}/confirm_stake", response_model=ActionResult)
+def confirm_stake(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """第二步：确认人工桩号；超出路段起止范围的桩号会被拒绝。"""
+    entry, message = workbench.confirm_stake(entry_id, payload.values.get("人工桩号"))
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
+
+
+@router.post("/{entry_id}/writeback", response_model=ActionResult)
+def writeback(
+    entry_id: int,
+    payload: EntryPayload,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> ActionResult:
+    """第三步：提交回写；同一幂等键的并发重试只落一条记录。"""
+    key = idempotency_key or payload.values.get("幂等键")
+    entry, message, deduplicated = workbench.writeback(entry_id, key)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry={**entry, "deduplicated": deduplicated})
 
 
 @router.get("/{entry_id}", response_model=dict)

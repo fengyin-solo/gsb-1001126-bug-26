@@ -6,6 +6,7 @@
         <p class="page-desc">维护巡查记录，围绕巡查编号、巡查路段、巡查日期、巡查人员做登记、筛选与状态流转。</p>
       </div>
       <div class="page-actions">
+        <RouterLink class="btn primary" to="/patrol/workbench">巡查工作台</RouterLink>
         <button class="btn primary" type="button" @click="openCreate">登记巡查记录</button>
         <button class="btn" type="button" @click="exportRows">导出日常巡查清单</button>
       </div>

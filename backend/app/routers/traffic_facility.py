@@ -12,31 +12,35 @@ router = APIRouter(prefix="/api/traffic_facility", tags=["交安设施"])
 
 service = TrafficFacilityService()
 
-LIST_FIELDS = ["设施编号", "设施类型", "所属路段", "桩号位置", "设置日期", "反光等级", "完好程度", "设施状态"]
+LIST_FIELDS = ["设施编号", "设施类型", "所属路段", "桩号位置", "责任组", "迁移标注", "设施状态"]
 STATUSES = ["完好", "污损", "缺失", "已更换"]
 
 
 @router.get("", response_model=PageResult[dict])
 def list_entries(
     keyword: str | None = Query(default=None, description="按设施编号检索"),
+    section: str | None = Query(default=None, description="按所属路段检索，如 ROAD-0001"),
+    group: str | None = Query(default=None, description="按责任组检索，如 交安一组"),
     status: str | None = Query(default=None, description="完好、污损、缺失、已更换"),
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
-    """按设施编号与状态过滤交安设施列表；没有数据时返回空页，不报错。"""
+    """按设施编号、所属路段、责任组与状态过滤交安设施列表；没有数据时返回空页，不报错。"""
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
-    items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
+    items, total = service.list_entries(
+        keyword=keyword, section=section, group=group, status=status, page=page, size=size
+    )
     return PageResult(items=items, total=total, page=page, size=size)
 
 
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
-    """读取单条交安设施明细；不存在时给出可读的错误说明。"""
-    entry = service.get_entry(entry_id)
-    if entry is None:
+    """读取单条交安设施明细：含历史位置（原施工记录）与按设施编号去重后的同路段相关设施。"""
+    detail = service.get_detail(entry_id)
+    if detail is None:
         raise HTTPException(status_code=404, detail=f"交安设施 {entry_id} 不存在或已归档")
-    return entry
+    return detail
 
 
 @router.post("", response_model=ActionResult)

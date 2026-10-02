@@ -14,6 +14,13 @@ class Store:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """存量数据迁移：无责任组的交安设施统一打上迁移标注，等待巡查核对后补录。"""
+        for row in self._tables.get("traffic_facility", []):
+            if not row.get("责任组") and not row.get("迁移标注"):
+                row["迁移标注"] = "待补录责任组"
 
     def module_names(self) -> list[str]:
         return sorted(self._tables)

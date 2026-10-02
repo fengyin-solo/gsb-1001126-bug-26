@@ -12,6 +12,13 @@ ACTION_RULES = {"设置施工": "施工", "设置限行": "限行", "恢复通�
 NEGATIVE_ACTIONS = []
 
 
+def _serialize(row: dict[str, Any]) -> dict[str, Any]:
+    """路段状态以 status 为准输出，避免列表状态错位。"""
+    data = dict(row)
+    data["路段状态"] = str(row.get("status") or STATUS_ORDER[0])
+    return data
+
+
 class RoadSectionService:
     def list_entries(
         self,
@@ -28,10 +35,11 @@ class RoadSectionService:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        return [_serialize(row) for row in rows[start:start + size]], total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        entry = store.find(MODULE, entry_id)
+        return _serialize(entry) if entry is not None else None
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]
@@ -58,4 +66,4 @@ class RoadSectionService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"管养路段已{action}"
+        return _serialize(entry), f"管养路段已{action}"
